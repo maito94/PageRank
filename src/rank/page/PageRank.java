@@ -15,6 +15,7 @@ import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.util.StringUtils;
+import org.apache.hadoop.util.GenericOptionsParser;
 
 
 public class PageRank {
@@ -23,9 +24,14 @@ public class PageRank {
         AGGREGATE_RESIDUALS
     }
 
-    public static double MIN = 0.00;
-    public static double MAX = 1.00;
-    public static int EXPECTED_NODES = 4;
+    //TODO: might want to use a different netid
+    // compute filter parameters for netid mag399
+    double fromNetID = 0.993; // 993 is 399 reversed
+
+    //TODO: uncomment next two lines for submission
+    public static double rejectMIN = 0.00; // 0.9 * fromNetID
+    public static double rejectLIMIT = 0.00; // rejectMIN + 0.01
+
     public static double DAMPING_FACTOR = 0.85;
     public static double EPSILON = 0.0001;
 
@@ -33,10 +39,12 @@ public class PageRank {
     public static final Integer PAGE_RANK_INDEX = 2;
     public static final Integer DESTINATIONS_INDEX = 3;
 
-    public static String inputDirectory = "/Users/mag94/Desktop/hadoop/edges.txt";
-    public static String outputDirectory = "/Users/mag94/Desktop/hadoop/out/out_dir";
+    public static int EXPECTED_NODES;
+    public static int MAX_ITERATIONS;
 
-    public static String residualsOutputFile = "/Users/mag94/Desktop/hadoop/residuals.txt";
+    public static String inputDirectory;
+    public static String outputDirectory;
+    public static String outputFile;
 
 
     public static class FileMapper
@@ -45,6 +53,12 @@ public class PageRank {
         private Text source = new Text();
         private Text destination = new Text();
 
+        private String empty_string = "";
+
+        public boolean selectInputLine(double x) {
+            return ( (rejectMIN <= x && x < rejectLIMIT) ? false : true );
+        }
+
         /**
          * Map the original file to source and destination pairs.
          * Input format:
@@ -52,7 +66,7 @@ public class PageRank {
          *
          * Output format:
          *      Source  Destination if Randomization not filtered
-         *      Source  EMPTY       if Randomization is filtered    TODO: NEED TO IMPLEMENT THIS
+         *      Source  EMPTY       if Randomization is filtered
          *
          * @param key     Current line offset to file
          * @param value   Text at line offset in file
@@ -65,13 +79,21 @@ public class PageRank {
             Matcher matcher = pattern.matcher(value.toString());
 
             if (matcher.find() && matcher.groupCount() >= 3) {
-
+                source.set(matcher.group(1));
                 double parsedDouble = Double.parseDouble(matcher.group(3));
-                //TODO: should be !(MIN <= parsedDouble && parsedDouble <= MAX)
-                if (MIN <= parsedDouble && parsedDouble <= MAX)
-                    source.set(matcher.group(1));
+
+                // only select lines that are not within reject boundaries
+                if (selectInputLine(parsedDouble)) {
                     destination.set(matcher.group(2));
                     context.write(source, destination);
+                }
+
+                // still need to add the node with empty string to avoid completely filtering out the node during
+                // page rank calculations
+                else {
+                    destination.set(empty_string);
+                    context.write(source, destination);
+                }
             }
         }
     }
@@ -100,7 +122,6 @@ public class PageRank {
          *      D       0.25        B C
          * @param key       Source node
          * @param values    List of outgoing links from source node
-         * TODO: After map todo is implemented, need to check whether value is empty string or not
          */
         public void reduce(Text key, Iterable<Text> values, Context context)
                 throws IOException, InterruptedException
@@ -109,7 +130,10 @@ public class PageRank {
 
             for (Text d : values)
             {
-                destinations.add(d.toString());
+                // add destination to list only if it is not the empty string
+                if (!d.toString().isEmpty()) {
+                    destinations.add(d.toString());
+                }
             }
 
             String[] dest_array = destinations.toArray(new String[0]);
@@ -152,16 +176,50 @@ public class PageRank {
     }
 
     public static void main(String[] args) throws Exception {
-
         System.out.println("----- Executing -----");
 
+        Configuration conf = new Configuration();
+        String[] remainingArgs = new GenericOptionsParser(conf, args).getRemainingArgs();
+
+        if (remainingArgs.length == 5 || remainingArgs.length == 6) {
+
+            EXPECTED_NODES = Integer.parseInt(remainingArgs[0]);
+            MAX_ITERATIONS = Integer.parseInt(remainingArgs[1]);
+
+            inputDirectory = remainingArgs[2];
+            outputDirectory = remainingArgs[3];
+            outputFile = remainingArgs[4];
+
+            // TODO: handle 6th argument for block implementation
+
+        }
+        else {
+            System.err.println("Usage:");
+            System.err.println("\tpagerank <n> <i> <in directory> <out directory> <out file>");
+            System.err.println("\tpagerank <n> <i> <in directory> <out directory> <out file> <blocks>");
+            System.err.println("Where:");
+            System.err.println("\t<n> is the number of nodes.");
+            System.err.println("\t<i> is the number of maximum iterations to run.");
+            System.err.println("\t<in directory> is the input directory containing the file with the list of edges.");
+            System.err.println("\t<out directory> is the output directory to which Hadoop files are written");
+            System.err.println("\t<out file> is the output file to which the average residuals will be written to.");
+            System.err.println("\t<blocks> is the path to the file containing the blocks.");
+            System.err.println("\t\tIf this is provided, then the blocks version implementation will be run.");
+            System.exit(2);
+        }
+
+        // add one more level to outputDirectory so Hadoop output files are in directory rather then on the same level
+        // as the directory
+        outputDirectory += "/out";
+
+        // initialize the file to the desired format for our map reduce
         Job initJob = createInitializationJob(inputDirectory, outputDirectory);
         initJob.waitForCompletion(true);
 
-        RunUpdatePageRankJobs.runUpdatePageRankJobs(10, outputDirectory, outputDirectory);
-
+        // start running page rank iterations
+        RunUpdatePageRankJobs.runUpdatePageRankJobs(MAX_ITERATIONS, outputDirectory, outputDirectory);
 
         System.out.println("----- Completed -----");
-
+        System.exit(0);
     }
 }

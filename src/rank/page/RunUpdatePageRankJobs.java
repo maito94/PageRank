@@ -89,7 +89,7 @@ public class RunUpdatePageRankJobs {
 
         // Write out the average residuals calculated for each iteration
         try {
-            Files.write(Paths.get(PageRank.residualsOutputFile), sb.toString().getBytes());
+            Files.write(Paths.get(PageRank.outputFile), sb.toString().getBytes());
         } catch (IOException e) {
             //exception handling left as an exercise for the reader
         }

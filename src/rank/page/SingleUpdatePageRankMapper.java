@@ -1,6 +1,5 @@
 package rank.page;
 
-
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Mapper;
 
@@ -14,10 +13,11 @@ public class SingleUpdatePageRankMapper
     private Text source = new Text();
     private Text source_pagerank_degree = new Text();
     private Text destination = new Text();
+    private Text current_pagerank = new Text();
 
 
     // produces string of form: "Source=source PageRank=pagerank"
-    private String valueForDestination(String src, String pagerank, Integer degree) {
+    private String stringValueForDestination(String src, String pagerank, Integer degree) {
         String src_pr = "";
         src_pr += "Source=" + src + " PageRank=" + pagerank + " Degree=" + String.valueOf(degree);
         return src_pr;
@@ -25,10 +25,17 @@ public class SingleUpdatePageRankMapper
 
 
     // produces string of form: "Destination=dest"
-    private String valueForSource(String dest) {
+    private String stringValueForSource(String dest) {
         String d = "";
         d += "Destination=" + dest;
         return d;
+    }
+
+    // produces string of form: "PageRank=pagerank"
+    private String stringValueForPagRank(String pagerank) {
+        String pr = "";
+        pr += "PageRank=" + pagerank;
+        return pr;
     }
 
 
@@ -50,26 +57,29 @@ public class SingleUpdatePageRankMapper
      *      C       Source=A PageRank=0.25 Degree=2
      *      A       Destination=B
      *      A       Destination=C
+     *      A       PageRank=0.25
      *  B:
      *      D       Source=B PageRank=0.25 Degree=1
      *      B       Destination=D
+     *      B       PageRank=0.25
      *  C:
      *      A       Source=C PageRank=0.25 Degree=2
      *      B       Source=C PageRank=0.25 Degree=2
      *      C       Destination=A
      *      C       Destination=B
+     *      C       PageRank=0.25
      *  D:
      *      B       Source=D PageRank=0.25 Degree=2
      *      C       Source=D PageRank=0.25 Degree=2
      *      D       Destination=B
      *      D       Destination=C
+     *      D       PageRank=0.25
      */
     public void map(Object key, Text value, Mapper.Context context)
             throws IOException, InterruptedException
     {
 
         Pattern pattern = Pattern.compile("^ *(\\d+)\\s+(\\d+\\.\\d+)\\s+((\\d+\\s*)*)$");
-//        Pattern pattern = Pattern.compile("^ *(\\d+)\\s+(\\d+\\.\\d+)((\\s+\\d+)*)$");
         Matcher matcher = pattern.matcher(value.toString());
 
         if (matcher.find() && matcher.groupCount() > 0) {
@@ -80,22 +90,30 @@ public class SingleUpdatePageRankMapper
             String destinations = matcher.group(PageRank.DESTINATIONS_INDEX);
             String[] destinations_arr = destinations.split("\\s+");
 
-            // get pagerank of current node and setup source_pagerank value
+            // get pagerank of current node to setup current_pagerank value and source_pagerank value
             String pagerank = matcher.group(PageRank.PAGE_RANK_INDEX);
-            source_pagerank_degree.set( valueForDestination(source.toString(), pagerank, destinations_arr.length) );
+
+
+            // outputs: (A, PageRank=0.25) key value pair
+            current_pagerank.set( stringValueForPagRank(pagerank) );
+            context.write(source, current_pagerank);
+
+            source_pagerank_degree.set( stringValueForDestination(source.toString(), pagerank, destinations_arr.length) );
 
             for (String dest : destinations_arr) {
+                // outputs: (B, Source=A PageRank=0.25 Degree=2) key value pair
                 destination.set( dest );
                 context.write(destination, source_pagerank_degree);
 
-//                System.out.println("-----------------------------");
-//                System.out.println("Destination: " + dest + ", Info: " + source_pagerank_degree.toString());
-
-                destination.set( valueForSource(dest) );
+                // outputs: (A, Destination=B) key value pair
+                destination.set( stringValueForSource(dest) );
                 context.write(source, destination);
 
-//                System.out.println("Source: " + source.toString() + ", Destination: " + destination.toString());
-//                System.out.println("-----------------------------");
+
+                // System.out.println("-----------------------------");
+                // System.out.println("Destination: " + dest + ", Info: " + source_pagerank_degree.toString());
+                // System.out.println("Source: " + source.toString() + ", Destination: " + destination.toString());
+                // System.out.println("-----------------------------");
             }
         }
     }

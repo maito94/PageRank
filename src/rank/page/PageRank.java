@@ -19,6 +19,10 @@ import org.apache.hadoop.util.StringUtils;
 
 public class PageRank {
 
+    public enum PageRankEnums {
+        AGGREGATE_RESIDUALS
+    }
+
     public static double MIN = 0.00;
     public static double MAX = 1.00;
     public static int EXPECTED_NODES = 4;
@@ -30,7 +34,9 @@ public class PageRank {
     public static final Integer DESTINATIONS_INDEX = 3;
 
     public static String inputDirectory = "/Users/mag94/Desktop/hadoop/edges.txt";
-    public static String outputDirectory = "/Users/mag94/Desktop/hadoop/out_dir";
+    public static String outputDirectory = "/Users/mag94/Desktop/hadoop/out/out_dir";
+
+    public static String residualsOutputFile = "/Users/mag94/Desktop/hadoop/residuals.txt";
 
 
     public static class FileMapper
@@ -146,7 +152,6 @@ public class PageRank {
     }
 
     public static void main(String[] args) throws Exception {
-	// write your code here
 
         System.out.println("----- Executing -----");
 
@@ -158,9 +163,5 @@ public class PageRank {
 
         System.out.println("----- Completed -----");
 
-
-
     }
-
-
 }

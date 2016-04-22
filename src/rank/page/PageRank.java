@@ -17,7 +17,6 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.GenericOptionsParser;
 
-
 public class PageRank {
 
     public enum PageRankEnums {

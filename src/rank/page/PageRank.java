@@ -6,6 +6,9 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
@@ -16,6 +19,8 @@ import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.GenericOptionsParser;
+
+
 
 
 public class PageRank {
@@ -45,6 +50,73 @@ public class PageRank {
     public static String inputDirectory;
     public static String outputDirectory;
     public static String outputFile;
+
+
+    public static ArrayList<Integer> BLOCKID_BOUNDARIES = null;
+    public static ArrayList<Integer> BLOCK_SIZES = new ArrayList<>();
+
+
+    private static BufferedReader getFileReader(String filepath) {
+        File file = new File(filepath);
+        if (file.exists() && file.isFile()) {
+            try {
+                FileReader fr = new FileReader(filepath);
+                BufferedReader br = new BufferedReader(fr);
+                return br;
+            }
+            catch (FileNotFoundException ex) {
+                Logger.getLogger(PageRank.class.getName()).log(Level.SEVERE, null, ex);
+            }
+        }
+        return null;
+    }
+
+
+    /**
+     * Constructs an ArrayList of block id boundaries
+     *
+     * @param filepath  path to file containing block sizes
+     * @return ArrayList containing block id boundaries
+     */
+    private static ArrayList<Integer> getBlockIDBoundariesFromFile(String filepath) {
+        ArrayList<Integer> block_boundaries = new ArrayList<>();
+
+        try (BufferedReader br = getFileReader(filepath)) {
+            int currentBlockIDBoundary = 0;
+            String line;
+            while (br != null && (line = br.readLine().trim()) != null) {
+                Integer parsedBlockSize = Integer.parseInt(line);
+                block_boundaries.add(currentBlockIDBoundary + parsedBlockSize);
+                currentBlockIDBoundary += parsedBlockSize;
+
+                BLOCK_SIZES.add(parsedBlockSize);
+            }
+        } catch (IOException ex) {
+            Logger.getLogger(PageRank.class.getName()).log(Level.SEVERE, null, ex);
+        }
+
+        return block_boundaries;
+    }
+
+
+    /**
+     * Retrieves the block id associated with the node
+     *
+     * @param nodeID     node to look up block id for
+     * @return Block id corresponding to node
+     */
+    public static Integer getBlockID(Integer nodeID) {
+        Integer blockID = 0;
+
+        for (Integer blockBoundary : BLOCKID_BOUNDARIES) {
+            if (nodeID < blockBoundary) {
+                break;
+            }
+            blockID++;
+        }
+
+        return blockID;
+    }
 
 
     public static class FileMapper
@@ -181,6 +253,8 @@ public class PageRank {
         Configuration conf = new Configuration();
         String[] remainingArgs = new GenericOptionsParser(conf, args).getRemainingArgs();
 
+        Boolean block_implementation = false;
+
         if (remainingArgs.length == 5 || remainingArgs.length == 6) {
 
             EXPECTED_NODES = Integer.parseInt(remainingArgs[0]);
@@ -191,6 +265,11 @@ public class PageRank {
             outputFile = remainingArgs[4];
 
             // TODO: handle 6th argument for block implementation
+
+            if (remainingArgs.length == 6) {
+                block_implementation = true;
+                BLOCKID_BOUNDARIES = getBlockIDBoundariesFromFile( remainingArgs[5] );
+            }
 
         }
         else {

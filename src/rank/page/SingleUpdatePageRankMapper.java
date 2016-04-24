@@ -42,10 +42,12 @@ public class SingleUpdatePageRankMapper
     /**
      * Input format:
      *      Source  PageRank    Destinations
-     *      A       0.25        B C
-     *      B       0.25        D
-     *      C       0.25        A B
-     *      D       0.25        B C
+     *      A       0.20        B C E
+     *      B       0.20        D
+     *      C       0.20        A B
+     *      D       0.20        B C
+     *
+     *      E       0.20        A
      *
      * In order to have enough information during reducer phase, need to output:
      *      1. Destination-source pairs with page rank from source
@@ -79,7 +81,8 @@ public class SingleUpdatePageRankMapper
             throws IOException, InterruptedException
     {
 
-        Pattern pattern = Pattern.compile("^ *(\\d+)\\s+(\\d+\\.\\d+)\\s+((\\d+\\s*)*)$");
+//        Pattern pattern = Pattern.compile("^ *(\\d+)\\s+(\\d+\\.\\d+)\\s+((\\d+\\s*)*)$");
+        Pattern pattern = Pattern.compile("^ *(\\d+)\\s+(\\d+\\.\\d+(?:E-\\d+)?+)\\s+((\\d+\\s*)*)$");
         Matcher matcher = pattern.matcher(value.toString());
 
         if (matcher.find() && matcher.groupCount() > 0) {

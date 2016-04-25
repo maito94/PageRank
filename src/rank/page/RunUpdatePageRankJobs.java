@@ -147,8 +147,42 @@ public class RunUpdatePageRankJobs {
 //    	Job job = createUpdateJob((int)System.currentTimeMillis(), inputDirectory, outputDirectory);
         int iteration = 0;
 
-        Job job = createBlockUpdatePageRankJob(iteration, inputDirectory, outputDirectory);
-        job.waitForCompletion(true);
+        StringBuilder sb = new StringBuilder();
+        while (iteration < maxIterations) {
+
+//            Job job = createUpdatePageRankJob((int)System.currentTimeMillis(), inputDirectory, outputDirectory);
+            Job job = createBlockUpdatePageRankJob(iteration, inputDirectory, outputDirectory);
+            job.waitForCompletion(true);
+
+            // need to use createUpdatePageRankJob output directory as new directory for chaining results
+            inputDirectory = outputDirectory + "_" + iteration;
+
+            // calculate average residual by getting counter and dividing by number of nodes
+            Counters jobCounters = job.getCounters();
+            Long long_aggregate_pagerank_residuals = jobCounters.findCounter(PageRank.PageRankEnums.AGGREGATE_ITERATION_PAGERANKS_RESIDUALS).getValue();
+            Double aggregate_pagerank_residuals = Double.longBitsToDouble( long_aggregate_pagerank_residuals );
+
+            Double average_residual = aggregate_pagerank_residuals / PageRank.EXPECTED_NODES;
+            System.out.println("Average Residual: " + average_residual);
+            sb.append("Iteration " + iteration + " avg error " + average_residual + "\n");
+
+            Long aggragate_iterations = jobCounters.findCounter(PageRank.PageRankEnums.AGGREGATE_BLOCK_ITERATIONS).getValue();
+            Double average_iterations = Double.valueOf(aggragate_iterations) / PageRank.BLOCKID_BOUNDARIES.size();
+            sb.append("Iteration " + iteration + " avg block iterations " + average_iterations + "\n");
+
+            if (aggregate_pagerank_residuals < PageRank.EXPECTED_NODES * PageRank.EPSILON) {
+                break;
+            }
+
+            iteration++;
+        }
+
+        // Write out the average residuals calculated for each iteration
+        try {
+            Files.write(Paths.get(PageRank.outputFile), sb.toString().getBytes());
+        } catch (IOException e) {
+            //exception handling left as an exercise for the reader
+        }
 
         return iteration;
     }

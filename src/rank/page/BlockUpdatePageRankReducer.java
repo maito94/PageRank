@@ -31,12 +31,16 @@ public class BlockUpdatePageRankReducer
      *  }
      *  for( v ∈ B ) { PR[v] = NPR[v]; }
      */
-    public static void iterateBlockOnce(Double[] PR, Integer[] deg, Integer blockID,
-                                        ArrayList< NTuple.Pair<Integer, Integer> > BE,
-                                        ArrayList< NTuple.Triple<Integer, Integer, Double> > BC)
+    public static NTuple.Pair<Double[], Double[]> iterateBlockOnce(Double[] PR, Integer[] deg, Integer blockID,
+                                                                   ArrayList< NTuple.Pair<Integer, Integer> > BE,
+                                                                   ArrayList< NTuple.Triple<Integer, Integer, Double> > BC)
     {
+
         Double[] NPR = new Double[ PR.length ];
         Arrays.fill(NPR, 0.0);
+
+        Double[] residuals = new Double[ PR.length ];
+        Arrays.fill(residuals, 0.0);
 
         for (NTuple.Pair<Integer, Integer> u_v : BE) {
             Integer u = u_v.getFirst();
@@ -61,13 +65,22 @@ public class BlockUpdatePageRankReducer
 
         int pr_length = PR.length;
         for (int i = 0; i < pr_length; i++) {
-            PR[i] = PageRank.DAMPING_FACTOR*NPR[i] + (1-PageRank.DAMPING_FACTOR)/PageRank.EXPECTED_NODES;
+            NPR[i] = PageRank.DAMPING_FACTOR*NPR[i] + (1-PageRank.DAMPING_FACTOR)/PageRank.EXPECTED_NODES;
 
 //            System.out.println("-----------------------");
+//            System.out.println("BlockID: " + blockID);
 //            System.out.println("PR[" + i + "]: " + PR[i]);
+//            System.out.println("NPR[" + i + "]: " + NPR[i]);
 //            System.out.println("-----------------------");
+
+
+            // calculate residual for current node
+            residuals[i] = Math.abs(PR[i] - NPR[i]) / NPR[i];
 
         }
+
+        NTuple.Pair<Double[], Double[]> npr_residuals = new NTuple().new Pair<>(NPR, residuals);
+        return npr_residuals;
     }
 
     /**
@@ -109,13 +122,13 @@ public class BlockUpdatePageRankReducer
     public void reduce(Text key, Iterable<Text> values, Context context)
             throws IOException, InterruptedException
     {
-        System.out.println("-----------------------");
-        System.out.println("REDUCING");
-        System.out.println("-----------------------");
+//        System.out.println("-----------------------");
+//        System.out.println("REDUCING");
+//        System.out.println("-----------------------");
 
         Integer blockID = Integer.valueOf(key.toString());
         Integer block_size = PageRank.BLOCK_SIZES.get( blockID );
-        Double[] pageranksInBlock = new Double[block_size]; // PR
+        Double[] oldPageRanksInBlock = new Double[block_size]; // PR
         Integer[] degreesOfNode = new Integer[block_size];
 
         String[] outgoingLinks = new String[block_size];
@@ -129,9 +142,6 @@ public class BlockUpdatePageRankReducer
             String[] info_arr = info_str.split("\\s+");
 
 
-            System.out.println("INFO_STR: " + info_str);
-
-
             // construct PR array
             if (info_arr[1].contains("PageRank")) {
                 // info_str = "Key=A PageRank=0.20"
@@ -143,7 +153,7 @@ public class BlockUpdatePageRankReducer
                 Double pagerank = Double.valueOf( info_arr[1].substring(index_pagerank + 1) );
 
                 // normalize u to index within own block
-                pageranksInBlock[ PageRank.getNodeBlockIndex(u, blockID) ] = pagerank;
+                oldPageRanksInBlock[ PageRank.getNodeBlockIndex(u, blockID) ] = pagerank;
             }
             // construct BE array
             else if (info_arr[1].contains("Destinations")) {
@@ -156,11 +166,13 @@ public class BlockUpdatePageRankReducer
                 String[] destinations = info_arr[1].substring(index_destinations + 1).split(",");
 
                 for (String d : destinations) {
-                    Integer v = Integer.valueOf( d );
+                    if (!d.isEmpty()) {
+                        Integer v = Integer.valueOf(d);
 
-                    if (PageRank.getBlockID( v ) == blockID) {
-                        NTuple.Pair<Integer, Integer> u_v = new NTuple().new Pair<>(u, v);
-                        edgesInBlock.add(u_v);
+                        if (PageRank.getBlockID(v) == blockID) {
+                            NTuple.Pair<Integer, Integer> u_v = new NTuple().new Pair<>(u, v);
+                            edgesInBlock.add(u_v);
+                        }
                     }
                 }
 
@@ -202,18 +214,72 @@ public class BlockUpdatePageRankReducer
             }
         }
 
-        iterateBlockOnce(pageranksInBlock, degreesOfNode, blockID, edgesInBlock, boundaryConditinsInBlock);
+        int max_iterations = 100;
+        int iterations = 0;
+
+        Double[] newPageRanksInBlock;
+        Double[] inblock_residuals;
+
+        Double[] pagerank_start = new Double[block_size];
+        // store page ranks before iterations begin (used for outer-block residual calculation)
+        for (int i = 0; i < block_size; i++) {
+            pagerank_start[i] = oldPageRanksInBlock[i];
+        }
+
+
+        Double average_inblock_residual = 10.0;
+        while (average_inblock_residual > PageRank.EPSILON) {
+//      while (iterations < max_iterations) {
+
+            context.getCounter(PageRank.PageRankEnums.AGGREGATE_BLOCK_ITERATIONS).increment(1);
+
+            NTuple.Pair<Double[], Double[]> pr_residuals=
+                    iterateBlockOnce(oldPageRanksInBlock, degreesOfNode, blockID, edgesInBlock, boundaryConditinsInBlock);
+
+            // get new page rank values and residuals
+            newPageRanksInBlock = pr_residuals.getFirst();
+            inblock_residuals = pr_residuals.getSecond();
+            iterations++;
+
+            // sum up value of residuals and calculate average
+            Double aggregate_inblock_residuals = 0.0;
+            for (Double d : inblock_residuals) {
+                aggregate_inblock_residuals += d;
+            }
+//            Double average_inblock_residual = aggregate_inblock_residuals / block_size;
+            average_inblock_residual = aggregate_inblock_residuals / block_size;
+
+
+            // update page ranks to new values
+            oldPageRanksInBlock = newPageRanksInBlock;
+
+            if (average_inblock_residual < PageRank.EPSILON) {
+                break;
+            }
+        }
 
 
         for (int i = 0; i < block_size; i++) {
             String str_result = "";
             Integer nodeID = PageRank.getNodeIDFromIndex(i, blockID);
-            str_result += pageranksInBlock[i] + " " + outgoingLinks[i];
+            str_result += oldPageRanksInBlock[i] + " " + outgoingLinks[i];
 
             result.set(str_result);
             node.set( String.valueOf(nodeID) );
 
             context.write(node, result);
+
+
+            // calculate page rank residual after iterations end (used for outer-block residual calculation)
+            Double pagerank_residual = Math.abs(pagerank_start[i] - oldPageRanksInBlock[i]) / oldPageRanksInBlock[i];
+
+            // need to get running page rank residuals and convert it to double to increment value
+            Long long_running_pagerank_residuals = context.getCounter(PageRank.PageRankEnums.AGGREGATE_ITERATION_PAGERANKS_RESIDUALS).getValue();
+            Double running_pagerank_residuals = Double.longBitsToDouble(long_running_pagerank_residuals);
+
+            // overwrite counter for running pagerank residuals
+            long_running_pagerank_residuals = Double.doubleToLongBits( pagerank_residual + running_pagerank_residuals );
+            context.getCounter(PageRank.PageRankEnums.AGGREGATE_ITERATION_PAGERANKS_RESIDUALS).setValue(long_running_pagerank_residuals);
         }
 
     }

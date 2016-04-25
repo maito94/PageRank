@@ -24,7 +24,9 @@ import org.apache.hadoop.util.GenericOptionsParser;
 public class PageRank {
 
     public enum PageRankEnums {
-        AGGREGATE_RESIDUALS
+        AGGREGATE_RESIDUALS,
+        AGGREGATE_ITERATION_PAGERANKS_RESIDUALS,
+        AGGREGATE_BLOCK_ITERATIONS
     }
 
     //TODO: might want to use a different netid
@@ -180,6 +182,8 @@ public class PageRank {
          *      Source  Destination if Randomization not filtered
          *      Source  EMPTY       if Randomization is filtered
          *
+         *      Source BACKUP       if Destinations is dangling node
+         *
          * @param key     Current line offset to file
          * @param value   Text at line offset in file
          */
@@ -206,6 +210,11 @@ public class PageRank {
                     destination.set(empty_string);
                     context.write(source, destination);
                 }
+
+                source.set(matcher.group(2));
+                destination.set("BACKUP");
+                context.write(source, destination);
+
             }
         }
     }
@@ -229,6 +238,9 @@ public class PageRank {
          * Output format:
          *      Source  PageRank    Destinations
          *      A       0.25        B C
+         *
+         *      B       0.25
+         *
          *      B       0.25        D
          *      C       0.25        A B
          *      D       0.25        B C
@@ -243,7 +255,7 @@ public class PageRank {
             for (Text d : values)
             {
                 // add destination to list only if it is not the empty string
-                if (!d.toString().isEmpty()) {
+                if (!d.toString().isEmpty() && !d.toString().equals("BACKUP")) {
                     destinations.add(d.toString());
                 }
             }

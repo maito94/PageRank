@@ -120,18 +120,20 @@ public class BlockUpdatePageRankeMapper
 
 
             for (String dest : destinations_arr) {
-                Integer dest_blockID = PageRank.getBlockID( Integer.valueOf(dest) );
-                if (blockID != dest_blockID) {
-                    // outputs: (Block', Key=E Source=A SourceBlock=Block PageRank=0.20 Degree=3) key value pair
-                    block.set( String.valueOf(dest_blockID) );
-                    node_boundarycondition.set( stringValueForBoundaries(dest, source, String.valueOf(blockID), pagerank, degrees) );
-                    context.write(block, node_boundarycondition);
-                }
+                if (!dest.isEmpty()) {
+                    Integer dest_blockID = PageRank.getBlockID(Integer.valueOf(dest));
+                    if (blockID != dest_blockID) {
+                        // outputs: (Block', Key=E Source=A SourceBlock=Block PageRank=0.20 Degree=3) key value pair
+                        block.set(String.valueOf(dest_blockID));
+                        node_boundarycondition.set(stringValueForBoundaries(dest, source, String.valueOf(blockID), pagerank, degrees));
+                        context.write(block, node_boundarycondition);
+                    }
 
 
 //                 System.out.println("-----------------------------");
 //                 System.out.println("BC: " + node_boundarycondition.toString());
 //                 System.out.println("-----------------------------");
+                }
             }
         }
 

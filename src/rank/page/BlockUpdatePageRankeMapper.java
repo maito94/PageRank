@@ -29,7 +29,7 @@ public class BlockUpdatePageRankeMapper
     // produces string of form: "Destinations=dest1,dest2"
     private String stringValueForDestinations(String key, String[] dests) {
         String d = "";
-        d += "Key=" + key + " Desinations=" + StringUtils.join(",", dests);
+        d += "Key=" + key + " Destinations=" + StringUtils.join(",", dests);
         return d;
     }
 
@@ -129,10 +129,9 @@ public class BlockUpdatePageRankeMapper
                 }
 
 
-                // System.out.println("-----------------------------");
-                // System.out.println("Destination: " + dest + ", Info: " + source_pagerank_degree.toString());
-                // System.out.println("Source: " + source.toString() + ", Destination: " + destination.toString());
-                // System.out.println("-----------------------------");
+//                 System.out.println("-----------------------------");
+//                 System.out.println("BC: " + node_boundarycondition.toString());
+//                 System.out.println("-----------------------------");
             }
         }
 

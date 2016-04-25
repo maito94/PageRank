@@ -3,6 +3,7 @@ package rank.page;
 
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Reducer;
+import org.apache.hadoop.util.StringUtils;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -11,6 +12,8 @@ import java.util.Arrays;
 public class BlockUpdatePageRankReducer
         extends Reducer<Text, Text, Text, Text>
 {
+
+    private Text node = new Text();
     private Text result = new Text();
 
 
@@ -28,7 +31,7 @@ public class BlockUpdatePageRankReducer
      *  }
      *  for( v ∈ B ) { PR[v] = NPR[v]; }
      */
-    public static void iterateBlockOnce(Double[] PR, Integer[] deg,
+    public static void iterateBlockOnce(Double[] PR, Integer[] deg, Integer blockID,
                                         ArrayList< NTuple.Pair<Integer, Integer> > BE,
                                         ArrayList< NTuple.Triple<Integer, Integer, Double> > BC)
     {
@@ -39,7 +42,11 @@ public class BlockUpdatePageRankReducer
             Integer u = u_v.getFirst();
             Integer v = u_v.getSecond();
 
-            NPR[v] += PR[u] / deg[u];
+            // normalize u and v to indices within own block
+            Integer u_index = PageRank.getNodeBlockIndex(u, blockID);
+            Integer v_index = PageRank.getNodeBlockIndex(v, blockID);
+
+            NPR[v_index] += PR[u_index] / deg[u_index];
         }
 
         for (NTuple.Triple<Integer, Integer, Double> u_v_R : BC) {
@@ -47,12 +54,19 @@ public class BlockUpdatePageRankReducer
             Integer v = u_v_R.getSecond();
             Double R = u_v_R.getThird();
 
-            NPR[v] = PageRank.DAMPING_FACTOR*NPR[v] + (1-PageRank.DAMPING_FACTOR)/PageRank.EXPECTED_NODES;
+            // normalize v to index within own block
+            Integer v_index = PageRank.getNodeBlockIndex(v, blockID);
+            NPR[v_index] += R;
         }
 
         int pr_length = PR.length;
         for (int i = 0; i < pr_length; i++) {
-            PR[i] = NPR[i];
+            PR[i] = PageRank.DAMPING_FACTOR*NPR[i] + (1-PageRank.DAMPING_FACTOR)/PageRank.EXPECTED_NODES;
+
+//            System.out.println("-----------------------");
+//            System.out.println("PR[" + i + "]: " + PR[i]);
+//            System.out.println("-----------------------");
+
         }
     }
 
@@ -95,9 +109,16 @@ public class BlockUpdatePageRankReducer
     public void reduce(Text key, Iterable<Text> values, Context context)
             throws IOException, InterruptedException
     {
-        Integer block_size = PageRank.BLOCK_SIZES.get( Integer.valueOf(key.toString()) );
+        System.out.println("-----------------------");
+        System.out.println("REDUCING");
+        System.out.println("-----------------------");
+
+        Integer blockID = Integer.valueOf(key.toString());
+        Integer block_size = PageRank.BLOCK_SIZES.get( blockID );
         Double[] pageranksInBlock = new Double[block_size]; // PR
         Integer[] degreesOfNode = new Integer[block_size];
+
+        String[] outgoingLinks = new String[block_size];
 
         ArrayList< NTuple.Pair<Integer, Integer> > edgesInBlock = new ArrayList<>(); // BE
         ArrayList< NTuple.Triple<Integer, Integer, Double> > boundaryConditinsInBlock = new ArrayList<>(); // BC
@@ -107,17 +128,27 @@ public class BlockUpdatePageRankReducer
             String info_str = info.toString();
             String[] info_arr = info_str.split("\\s+");
 
+
+            System.out.println("INFO_STR: " + info_str);
+
+
             // construct PR array
             if (info_arr[1].contains("PageRank")) {
+                // info_str = "Key=A PageRank=0.20"
+                // info_arr = ["Key=A", "PageRank=0.20"]
                 int index_u = info_arr[0].indexOf('=');
                 Integer u = Integer.valueOf( info_arr[0].substring(index_u + 1) );
 
                 int index_pagerank = info_arr[1].indexOf('=');
                 Double pagerank = Double.valueOf( info_arr[1].substring(index_pagerank + 1) );
-                pageranksInBlock[ u ] = pagerank;
+
+                // normalize u to index within own block
+                pageranksInBlock[ PageRank.getNodeBlockIndex(u, blockID) ] = pagerank;
             }
             // construct BE array
             else if (info_arr[1].contains("Destinations")) {
+                // info_str = "Key=A Destinations=B,C,E"
+                // info_arr = ["Key=A", "Destinations=B,C,E"]
                 int index_u = info_arr[0].indexOf('=');
                 Integer u = Integer.valueOf( info_arr[0].substring(index_u + 1) );
 
@@ -127,25 +158,31 @@ public class BlockUpdatePageRankReducer
                 for (String d : destinations) {
                     Integer v = Integer.valueOf( d );
 
-                    // TODO: also might want to create array of all u_v regardless to reconstruct original format
-                    if (PageRank.getBlockID( v ) == Integer.valueOf(key.toString())) {
+                    if (PageRank.getBlockID( v ) == blockID) {
                         NTuple.Pair<Integer, Integer> u_v = new NTuple().new Pair<>(u, v);
                         edgesInBlock.add(u_v);
                     }
                 }
+
+                outgoingLinks[ PageRank.getNodeBlockIndex(u, blockID) ] = StringUtils.join(" ", destinations);
             }
             // construct Degree array
             else if (info_arr[1].contains("Degree")) {
+                // info_str = "Key=A Degree=3"
+                // info_arr = ["Key=A", "Degree=3"]
                 int index_u = info_arr[0].indexOf('=');
                 Integer u = Integer.valueOf( info_arr[0].substring(index_u + 1) );
 
                 int index_degree = info_arr[1].indexOf('=');
                 Integer degree = Integer.valueOf( info_arr[1].substring(index_degree + 1) );
-                degreesOfNode[ u ] = degree;
+
+                // normalize u to index within own block
+                degreesOfNode[ PageRank.getNodeBlockIndex(u, blockID) ] = degree;
             }
             // construct BC array
-            // info contains: "Key=A Source=E SourceBlock=Block' PageRank=0.20 Degree=1"
             else {
+                // info_str = "Key=A Source=E SourceBlock=Block' PageRank=0.20 Degree=1"
+                // info_arr = ["Key=A", "Source=E", "SourceBlock=Block'", "PageRank=0.20", "Degree=1"]
                 int index_v = info_arr[0].indexOf('=');
                 Integer v = Integer.valueOf( info_arr[0].substring(index_v + 1) );
 
@@ -162,12 +199,22 @@ public class BlockUpdatePageRankReducer
 
                 NTuple.Triple<Integer, Integer, Double> u_v_R = new NTuple().new Triple<>(u, v, R);
                 boundaryConditinsInBlock.add(u_v_R);
-
             }
-
         }
 
-        iterateBlockOnce(pageranksInBlock, degreesOfNode, edgesInBlock, boundaryConditinsInBlock);
+        iterateBlockOnce(pageranksInBlock, degreesOfNode, blockID, edgesInBlock, boundaryConditinsInBlock);
+
+
+        for (int i = 0; i < block_size; i++) {
+            String str_result = "";
+            Integer nodeID = PageRank.getNodeIDFromIndex(i, blockID);
+            str_result += pageranksInBlock[i] + " " + outgoingLinks[i];
+
+            result.set(str_result);
+            node.set( String.valueOf(nodeID) );
+
+            context.write(node, result);
+        }
 
     }
 }

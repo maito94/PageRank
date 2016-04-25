@@ -21,8 +21,6 @@ import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.GenericOptionsParser;
 
 
-
-
 public class PageRank {
 
     public enum PageRankEnums {
@@ -81,11 +79,16 @@ public class PageRank {
     private static ArrayList<Integer> getBlockIDBoundariesFromFile(String filepath) {
         ArrayList<Integer> block_boundaries = new ArrayList<>();
 
+        System.out.println(filepath);
+
         try (BufferedReader br = getFileReader(filepath)) {
             int currentBlockIDBoundary = 0;
+
             String line;
-            while (br != null && (line = br.readLine().trim()) != null) {
+            while (br != null && (line = br.readLine()) != null) {
+                line = line.trim();
                 Integer parsedBlockSize = Integer.parseInt(line);
+
                 block_boundaries.add(currentBlockIDBoundary + parsedBlockSize);
                 currentBlockIDBoundary += parsedBlockSize;
 
@@ -96,6 +99,43 @@ public class PageRank {
         }
 
         return block_boundaries;
+    }
+
+
+
+    /**
+     * Retrieves the index of the node within its block
+     *
+     * @param nodeID    node to look up index for
+     * @param blockID   blockID of node
+     * @return Index of node within block
+     */
+    public static Integer getNodeBlockIndex(Integer nodeID, Integer blockID) {
+        Integer index_node = nodeID;
+
+        if (0 < blockID) {
+            index_node -= BLOCKID_BOUNDARIES.get( blockID - 1 );
+        }
+
+        return index_node;
+    }
+
+
+    /**
+     * Retrieves the node id given the index into a block
+     *
+     * @param nodeIndex index of node within block
+     * @param blockID   blockID of node
+     * @return node id
+     */
+    public static Integer getNodeIDFromIndex(Integer nodeIndex, Integer blockID) {
+        Integer nodeid = nodeIndex;
+
+        if (0 < blockID) {
+            nodeid += BLOCKID_BOUNDARIES.get( blockID - 1 );
+        }
+
+        return nodeid;
     }
 
 
@@ -295,8 +335,14 @@ public class PageRank {
         Job initJob = createInitializationJob(inputDirectory, outputDirectory);
         initJob.waitForCompletion(true);
 
-        // start running page rank iterations
-        RunUpdatePageRankJobs.runUpdatePageRankJobs(MAX_ITERATIONS, outputDirectory, outputDirectory);
+        if (block_implementation) {
+            RunUpdatePageRankJobs.runBlockUpdatePageRankJobs(MAX_ITERATIONS, outputDirectory, outputDirectory);
+        }
+        else {
+            // start running page rank iterations
+            RunUpdatePageRankJobs.runSingleUpdatePageRankJobs(MAX_ITERATIONS, outputDirectory, outputDirectory);
+        }
+
 
         System.out.println("----- Completed -----");
         System.exit(0);

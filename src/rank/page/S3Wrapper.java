@@ -19,6 +19,10 @@ public class S3Wrapper {
     private static final String BUCKET_NAME = "cs5300-hadoop-project";
     private static final AmazonS3 S3CLIENT = new AmazonS3Client(new BasicAWSCredentials(ACCESS_KEY_ID, SECRET_ACCESS_KEY));
     
+    public static void main(String[] args) {
+        downloadFile(BUCKET_NAME, "results.txt", true);
+    }
+    
     public static void listBuckets() {
         System.out.println("----- Buckets -----");
         for (Bucket b : S3CLIENT.listBuckets())
@@ -59,15 +63,20 @@ public class S3Wrapper {
         System.out.println("File " + file.getName() + " was uploaded successfully.\n");
     }
     
-    public static File downloadFile(String bucketname, String filename) {
-        if (S3CLIENT.doesBucketExist(bucketname) /*Check if file exists*/) {
+    public static File downloadFile(String bucketname, String filename, boolean overwrite) {
+        if (S3CLIENT.doesBucketExist(bucketname)) {
             try {
                 S3Object s3object = S3CLIENT.getObject(bucketname, filename);
                 InputStream s3is = s3object.getObjectContent();
                 
-                File file = new File("res/" + filename + "-" + System.currentTimeMillis());
+                File file;
+                if (overwrite)
+                    file = new File("res/" + filename);
+                else
+                    file = new File("res/" + filename + "-" + System.currentTimeMillis());
                 FileOutputStream fos = new FileOutputStream(file);
                 
+                System.out.println("Downloading file: " + filename + " --- Overwrite: " + overwrite);
                 int bytesRead;
                 byte[] buffer = new byte[1024];
                 while ((bytesRead = s3is.read(buffer)) != -1)
@@ -77,6 +86,7 @@ public class S3Wrapper {
                 fos.close();
                 s3is.close();
                 s3object.close();
+                System.out.println("File " + filename + " was downloaded to " + file.getName() + " successfully.");
                 
                 return file;
             }

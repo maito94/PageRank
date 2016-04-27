@@ -6,6 +6,7 @@ import com.amazonaws.services.s3.AmazonS3Client;
 import com.amazonaws.services.s3.model.Bucket;
 import com.amazonaws.services.s3.model.S3Object;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
+
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -14,14 +15,10 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class S3Wrapper {
+    public static final String BUCKET_NAME = "cs5300-hadoop-project";
     private static final String ACCESS_KEY_ID = "AKIAJ62G62YTENYHAHYA";
     private static final String SECRET_ACCESS_KEY = "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";
-    private static final String BUCKET_NAME = "cs5300-hadoop-project";
     private static final AmazonS3 S3CLIENT = new AmazonS3Client(new BasicAWSCredentials(ACCESS_KEY_ID, SECRET_ACCESS_KEY));
-    
-    public static void main(String[] args) {
-        downloadFile(BUCKET_NAME, "results.txt", true);
-    }
     
     public static void listBuckets() {
         System.out.println("----- Buckets -----");

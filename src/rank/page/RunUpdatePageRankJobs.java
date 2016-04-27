@@ -91,6 +91,7 @@ public class RunUpdatePageRankJobs {
         // Write out the average residuals calculated for each iteration
         try {
             Files.write(Paths.get(PageRank.outputFile), sb.toString().getBytes());
+            S3Wrapper.uploadFile(S3Wrapper.BUCKET_NAME, new File(PageRank.outputFile));
         } catch (IOException e) {
             //exception handling left as an exercise for the reader
         }
@@ -180,6 +181,7 @@ public class RunUpdatePageRankJobs {
         // Write out the average residuals calculated for each iteration
         try {
             Files.write(Paths.get(PageRank.outputFile), sb.toString().getBytes());
+            S3Wrapper.uploadFile(S3Wrapper.BUCKET_NAME, new File(PageRank.outputFile));
         } catch (IOException e) {
             //exception handling left as an exercise for the reader
         }

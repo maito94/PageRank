@@ -1,6 +1,7 @@
 package rank.page;
 
 import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 
@@ -90,7 +91,20 @@ public class RunUpdatePageRankJobs {
 
         // Write out the average residuals calculated for each iteration
         try {
-            Files.write(Paths.get(PageRank.outputFile), sb.toString().getBytes());
+            File outputFile = new File(PageRank.outputFile);
+            FileOutputStream fos = new FileOutputStream(outputFile);
+            BufferedOutputStream bos = new BufferedOutputStream(fos);
+            ByteArrayInputStream bais = new ByteArrayInputStream(sb.toString().getBytes(StandardCharsets.UTF_8));
+            
+            int bytesRead;
+            byte[] buffer = new byte[1024];
+            while ((bytesRead = bais.read(buffer)) != -1)
+                bos.write(buffer, 0, bytesRead);
+
+            bos.flush();
+            bos.close();
+            bais.close();
+
             S3Wrapper.uploadFile(S3Wrapper.BUCKET_NAME, new File(PageRank.outputFile));
         } catch (IOException e) {
             //exception handling left as an exercise for the reader
@@ -118,7 +132,7 @@ public class RunUpdatePageRankJobs {
 
         update_job.setJarByClass(RunUpdatePageRankJobs.class);
 
-        update_job.setMapperClass(BlockUpdatePageRankeMapper.class);
+        update_job.setMapperClass(BlockUpdatePageRankMapper.class);
         update_job.setMapOutputKeyClass(Text.class);
         update_job.setMapOutputValueClass(Text.class);
 
@@ -180,7 +194,20 @@ public class RunUpdatePageRankJobs {
 
         // Write out the average residuals calculated for each iteration
         try {
-            Files.write(Paths.get(PageRank.outputFile), sb.toString().getBytes());
+            File outputFile = new File(PageRank.outputFile);
+            FileOutputStream fos = new FileOutputStream(outputFile);
+            BufferedOutputStream bos = new BufferedOutputStream(fos);
+            ByteArrayInputStream bais = new ByteArrayInputStream(sb.toString().getBytes(StandardCharsets.UTF_8));
+            
+            int bytesRead;
+            byte[] buffer = new byte[1024];
+            while ((bytesRead = bais.read(buffer)) != -1)
+                bos.write(buffer, 0, bytesRead);
+
+            bos.flush();
+            bos.close();
+            bais.close();
+            
             S3Wrapper.uploadFile(S3Wrapper.BUCKET_NAME, new File(PageRank.outputFile));
         } catch (IOException e) {
             //exception handling left as an exercise for the reader

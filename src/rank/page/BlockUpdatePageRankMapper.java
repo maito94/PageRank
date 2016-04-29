@@ -9,7 +9,7 @@ import java.io.IOException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-public class BlockUpdatePageRankeMapper
+public class BlockUpdatePageRankMapper
         extends Mapper<Object, Text, Text, Text>
 {
     private Text block = new Text();

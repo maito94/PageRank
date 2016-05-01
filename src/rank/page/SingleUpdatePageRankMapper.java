@@ -80,8 +80,6 @@ public class SingleUpdatePageRankMapper
     public void map(Object key, Text value, Mapper.Context context)
             throws IOException, InterruptedException
     {
-
-//        Pattern pattern = Pattern.compile("^ *(\\d+)\\s+(\\d+\\.\\d+)\\s+((\\d+\\s*)*)$");
         Pattern pattern = Pattern.compile("^ *(\\d+)\\s+(\\d+\\.\\d+(?:E-\\d+)?+)\\s+((\\d+\\s*)*)$");
         Matcher matcher = pattern.matcher(value.toString());
 
@@ -95,7 +93,6 @@ public class SingleUpdatePageRankMapper
 
             // get pagerank of current node to setup current_pagerank value and source_pagerank value
             String pagerank = matcher.group(PageRank.PAGE_RANK_INDEX);
-
 
             // outputs: (A, PageRank=0.25) key value pair
             current_pagerank.set( stringValueForPagRank(pagerank) );
@@ -112,11 +109,6 @@ public class SingleUpdatePageRankMapper
                 destination.set( stringValueForSource(dest) );
                 context.write(source, destination);
 
-
-                // System.out.println("-----------------------------");
-                // System.out.println("Destination: " + dest + ", Info: " + source_pagerank_degree.toString());
-                // System.out.println("Source: " + source.toString() + ", Destination: " + destination.toString());
-                // System.out.println("-----------------------------");
             }
         }
     }

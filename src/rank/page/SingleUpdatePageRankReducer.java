@@ -10,7 +10,7 @@ import java.util.List;
 
 
 public class SingleUpdatePageRankReducer
-    extends Reducer<Text, Text, Text, Text>
+        extends Reducer<Text, Text, Text, Text>
 {
     private Text result = new Text();
 
@@ -71,25 +71,20 @@ public class SingleUpdatePageRankReducer
                 Double source_pagerank = Double.valueOf(pagerank);
                 Double source_degree = Double.valueOf(degree);
                 updated_pagerank += source_pagerank/source_degree;
-
             }
         }
 
         // apply damping effect
         // (1 - d)/N + d(updated_pagerank)
-        updated_pagerank = (1.0 - PageRank.DAMPING_FACTOR)/PageRank.EXPECTED_NODES + PageRank.DAMPING_FACTOR*updated_pagerank;
+        updated_pagerank = (1.0 - PageRank.DAMPING_FACTOR)/context.getConfiguration().getInt("EXPECTED_NODES", 1) + PageRank.DAMPING_FACTOR*updated_pagerank;
         String pagerank_str = String.valueOf(updated_pagerank);
 
         // calculate residual for current node
         Double residual = Math.abs(old_pagerank - updated_pagerank) / updated_pagerank;
 
-        // need to get running residual and convert it to double to increment value
-        Long long_running_residual = context.getCounter(PageRank.PageRankEnums.AGGREGATE_RESIDUALS).getValue();
-        Double running_residual = Double.longBitsToDouble(long_running_residual);
-
-        // overwrite counter for running residual
-        Long long_residual = Double.doubleToLongBits( residual + running_residual );
-        context.getCounter(PageRank.PageRankEnums.AGGREGATE_RESIDUALS).setValue(long_residual);
+        // covert double to long and keep an accuracy of at least six decimal places
+        Long long_residual = (long)(residual * PageRank.ADDED_ACCURACY);
+        context.getCounter(PageRank.PageRankEnums.AGGREGATE_RESIDUALS).increment(long_residual);
 
         // get list of outgoing links to recreate file format
         String[] dest_array = destinations.toArray(new String[0]);
@@ -98,12 +93,5 @@ public class SingleUpdatePageRankReducer
         // outputs: (Node, PageRank ListOfOutgoingLinks) key value pair
         result.set(pagerank_str + " " + dest_result);
         context.write(key, result);
-
-
-//        System.out.println("---------------------------------------");
-//        System.out.println("old_pagerank: " + old_pagerank);
-//        System.out.println("updated_pagerank: " + updated_pagerank);
-//        System.out.println(key.toString() + " residual: " + residual);
-//        System.out.println("---------------------------------------");
     }
 }

@@ -2,6 +2,7 @@ package rank.page;
 
 import java.io.*;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -46,13 +47,50 @@ public class PageRank {
     public static int EXPECTED_NODES;
     public static int MAX_ITERATIONS;
 
-    public static String inputDirectory;
+    public static String BUCKET_NAME;
+    public static String inputFile;
     public static String outputDirectory;
     public static String outputFile;
 
+    //    public static Integer BASE_ACCURACY;
+    public static Integer ADDED_ACCURACY = 1000000;
 
-    public static ArrayList<Integer> BLOCKID_BOUNDARIES = null;
-    public static ArrayList<Integer> BLOCK_SIZES = new ArrayList<>();
+    public static ArrayList<Integer> BLOCKID_BOUNDARIES = new ArrayList<>(
+            Arrays.asList( new Integer[]{
+                    10328,  20373,  30629,  40645,  50462,  60841,
+                    70591,  80118,  90497, 100501, 110567, 120945,
+                    130999, 140574, 150953, 161332, 171154, 181514,
+                    191625, 202004, 212383, 222762, 232593, 242878,
+                    252938, 263149, 273210, 283473, 293255, 303043,
+                    313370, 323522, 333883, 343663, 353645, 363929,
+                    374236, 384554, 394929, 404712, 414617, 424747,
+                    434707, 444489, 454285, 464398, 474196, 484050,
+                    493968, 503752, 514131, 524510, 534709, 545088,
+                    555467, 565846, 576225, 586604, 596585, 606367,
+                    616148, 626448, 636240, 646022, 655804, 665666,
+                    675448, 685230
+            }));
+
+    public static ArrayList<Integer> BLOCK_SIZES = new ArrayList<>(
+            Arrays.asList( new Integer[] {
+                    10328, 10045, 10256, 10016, 9817, 10379,
+                    9750, 9527, 10379, 10004, 10066, 10378,
+                    10054, 9575, 10379, 10379, 9822, 10360,
+                    10111, 10379, 10379, 10379, 9831, 10285,
+                    10060, 10211, 10061, 10263, 9782, 9788,
+                    10327, 10152, 10361, 9780, 9982, 10284,
+                    10307, 10318, 10375, 9783, 9905, 10130,
+                    9960, 9782, 9796, 10113, 9798, 9854,
+                    9918, 9784, 10379, 10379, 10199, 10379,
+                    10379, 10379, 10379, 10379, 9981, 9782,
+                    9781, 10300, 9792, 9782, 9782, 9862,
+                    9782, 9782
+            }));
+
+
+    private static Integer getMinPower10(Double pr) {
+        return (pr < 1.0) ? 1 + getMinPower10(pr * 10.0) : 0;
+    }
 
 
     private static BufferedReader getFileReader(String filepath) {
@@ -79,9 +117,6 @@ public class PageRank {
      */
     private static ArrayList<Integer> getBlockIDBoundariesFromFile(String filepath) {
         ArrayList<Integer> block_boundaries = new ArrayList<>();
-
-        System.out.println(filepath);
-
         try (BufferedReader br = getFileReader(filepath)) {
             int currentBlockIDBoundary = 0;
 
@@ -101,7 +136,6 @@ public class PageRank {
 
         return block_boundaries;
     }
-
 
 
     /**
@@ -213,7 +247,6 @@ public class PageRank {
                 source.set(matcher.group(2));
                 destination.set("BACKUP");
                 context.write(source, destination);
-
             }
         }
     }
@@ -262,7 +295,9 @@ public class PageRank {
             String[] dest_array = destinations.toArray(new String[0]);
             String dest_result = StringUtils.join(" ", dest_array);
 
-            Double page_rank = 1.0 / EXPECTED_NODES;
+            Configuration conf = context.getConfiguration();
+
+            Double page_rank = 1.0 / conf.getInt("EXPECTED_NODES", 1);
             String pr_string = String.valueOf(page_rank);
 
             result.set(pr_string + " " + dest_result);
@@ -277,10 +312,10 @@ public class PageRank {
     public static Job createInitializationJob(String inputDirectory, String outputDirectory)
             throws IOException
     {
-//        Job init_job = new Job(new Configuration(), "pagerank_init");
         Configuration conf = new Configuration();
-        Job init_job = Job.getInstance(conf, "pagerank_init");
+        conf.setInt("EXPECTED_NODES", EXPECTED_NODES);
 
+        Job init_job = Job.getInstance(conf, "pagerank_init");
         init_job.setJarByClass(PageRank.class);
 
         init_job.setMapperClass(FileMapper.class);
@@ -294,7 +329,6 @@ public class PageRank {
         FileInputFormat.addInputPath(init_job, new Path(inputDirectory));
         FileOutputFormat.setOutputPath(init_job, new Path(outputDirectory));
 
-//        init_job.setInputFormatClass(KeyValueTextInputFormat.class);
         return init_job;
     }
 
@@ -306,33 +340,35 @@ public class PageRank {
 
         Boolean block_implementation = false;
 
-        if (remainingArgs.length == 5 || remainingArgs.length == 6) {
-
+        if (remainingArgs.length == 6 || remainingArgs.length == 7) {
             EXPECTED_NODES = Integer.parseInt(remainingArgs[0]);
+
+//            BASE_ACCURACY = (int)Math.pow(10, getMinPower10(1.0 / EXPECTED_NODES));
+//            System.out.println("BASE_ACCURACY: " + BASE_ACCURACY);
+
             MAX_ITERATIONS = Integer.parseInt(remainingArgs[1]);
 
-            inputDirectory = remainingArgs[2];
-            outputDirectory = remainingArgs[3];
-            outputFile = remainingArgs[4];
+            BUCKET_NAME = remainingArgs[2];
+            inputFile = "s3n://" + BUCKET_NAME + "/" + remainingArgs[3];
+            outputDirectory = "s3n://" + BUCKET_NAME + "/" + remainingArgs[4];
+            outputFile = remainingArgs[5];
 
-            // TODO: handle 6th argument for block implementation
-
-            if (remainingArgs.length == 6) {
+            if (remainingArgs.length == 7) {
                 block_implementation = true;
-                BLOCKID_BOUNDARIES = getBlockIDBoundariesFromFile( remainingArgs[5] );
+                BLOCKID_BOUNDARIES = getBlockIDBoundariesFromFile( remainingArgs[6] );
             }
-
         }
         else {
             System.err.println("Usage:");
-            System.err.println("\tpagerank <n> <i> <in directory> <out directory> <out file>");
-            System.err.println("\tpagerank <n> <i> <in directory> <out directory> <out file> <blocks>");
+            System.err.println("\tpagerank <n> <i> <bucket name> <in file> <out directory> <out file>");
+            System.err.println("\tpagerank <n> <i> <bucket name> <in file> <out directory> <out file> <blocks>");
             System.err.println("Where:");
             System.err.println("\t<n> is the number of nodes.");
             System.err.println("\t<i> is the number of maximum iterations to run.");
-            System.err.println("\t<in directory> is the input directory containing the file with the list of edges.");
-            System.err.println("\t<out directory> is the output directory to which Hadoop files are written");
-            System.err.println("\t<out file> is the output file to which the average residuals will be written to.");
+            System.err.println("\t<bucket name> is the name of the bucket where the files are located.");
+            System.err.println("\t<in file> path to file with the list of edges located within the bucket.");
+            System.err.println("\t<out directory> is the output directory to which Hadoop files are written to within the bucket.");
+            System.err.println("\t<out file> is the output file to which the average residuals will be written to within the bucket.");
             System.err.println("\t<blocks> is the path to the file containing the blocks.");
             System.err.println("\t\tIf this is provided, then the blocks version implementation will be run.");
             System.exit(2);
@@ -343,7 +379,7 @@ public class PageRank {
         outputDirectory += "/out";
 
         // initialize the file to the desired format for our map reduce
-        Job initJob = createInitializationJob(inputDirectory, outputDirectory);
+        Job initJob = createInitializationJob(inputFile, outputDirectory);
         initJob.waitForCompletion(true);
 
         if (block_implementation) {
@@ -353,7 +389,6 @@ public class PageRank {
             // start running page rank iterations
             RunUpdatePageRankJobs.runSingleUpdatePageRankJobs(MAX_ITERATIONS, outputDirectory, outputDirectory);
         }
-
 
         System.out.println("----- Completed -----");
         System.exit(0);

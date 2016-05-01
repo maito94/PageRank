@@ -2,8 +2,6 @@ package rank.page;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 
 import org.apache.hadoop.mapreduce.Counters;
 import org.apache.hadoop.conf.Configuration;
@@ -27,10 +25,11 @@ public class RunUpdatePageRankJobs {
     public static Job createSingleUpdatePageRankJob(int jobId, String inputDirectory, String outputDirectory)
             throws IOException
     {
-//        Job init_job = new Job(new Configuration(), "pagerank_update");
         Configuration conf = new Configuration();
-        Job update_job = Job.getInstance(conf, "pagerank_update");
+        conf.setInt("EXPECTED_NODES", PageRank.EXPECTED_NODES);
+//        conf.setInt("BASE_ACCURACY", PageRank.BASE_ACCURACY);
 
+        Job update_job = Job.getInstance(conf, "pagerank_update");
         update_job.setJarByClass(RunUpdatePageRankJobs.class);
 
         update_job.setMapperClass(SingleUpdatePageRankMapper.class);
@@ -44,7 +43,6 @@ public class RunUpdatePageRankJobs {
         FileInputFormat.addInputPath(update_job, new Path(inputDirectory));
         FileOutputFormat.setOutputPath(update_job, new Path(outputDirectory + "_" + jobId));
 
-//        init_job.setInputFormatClass(KeyValueTextInputFormat.class);
         return update_job;
     }
 
@@ -60,13 +58,10 @@ public class RunUpdatePageRankJobs {
     public static int runSingleUpdatePageRankJobs(int maxIterations, String inputDirectory, String outputDirectory)
             throws IOException, InterruptedException, ClassNotFoundException
     {
-//    	Job job = createUpdateJob((int)System.currentTimeMillis(), inputDirectory, outputDirectory);
         int iteration = 0;
 
         StringBuilder sb = new StringBuilder();
         while (iteration < maxIterations) {
-
-//            Job job = createUpdatePageRankJob((int)System.currentTimeMillis(), inputDirectory, outputDirectory);
             Job job = createSingleUpdatePageRankJob(iteration, inputDirectory, outputDirectory);
             job.waitForCompletion(true);
 
@@ -75,12 +70,15 @@ public class RunUpdatePageRankJobs {
 
             // calculate average residual by getting counter and dividing by number of nodes
             Counters jobCounters = job.getCounters();
+
+            // covert long to double by dividing by base and added accuracy during reduce phase
             Long long_aggregate_residuals = jobCounters.findCounter(PageRank.PageRankEnums.AGGREGATE_RESIDUALS).getValue();
-            Double aggregate_residuals = Double.longBitsToDouble( long_aggregate_residuals );
+
+            Double aggregate_residuals = (double)long_aggregate_residuals / (double)(PageRank.ADDED_ACCURACY);//(double)(PageRank.BASE_ACCURACY * PageRank.ADDED_ACCURACY);
             Double average_residual = aggregate_residuals / PageRank.EXPECTED_NODES;
 
-            System.out.println("Average Residual: " + average_residual);
-            sb.append("Iteration " + iteration + " avg error " + average_residual + "\n");
+            System.out.println("Iteration " + iteration + " avg error " + average_residual);
+            sb.append("Iteration " + iteration + " avg error " + average_residual);
 
             if (average_residual < PageRank.EPSILON) {
                 break;
@@ -91,11 +89,13 @@ public class RunUpdatePageRankJobs {
 
         // Write out the average residuals calculated for each iteration
         try {
+            System.out.println("PageRank.outputFile: " + PageRank.outputFile);
+
             File outputFile = new File(PageRank.outputFile);
             FileOutputStream fos = new FileOutputStream(outputFile);
             BufferedOutputStream bos = new BufferedOutputStream(fos);
             ByteArrayInputStream bais = new ByteArrayInputStream(sb.toString().getBytes(StandardCharsets.UTF_8));
-            
+
             int bytesRead;
             byte[] buffer = new byte[1024];
             while ((bytesRead = bais.read(buffer)) != -1)
@@ -105,9 +105,10 @@ public class RunUpdatePageRankJobs {
             bos.close();
             bais.close();
 
-            S3Wrapper.uploadFile(S3Wrapper.BUCKET_NAME, new File(PageRank.outputFile));
+            S3Wrapper.uploadFile(PageRank.BUCKET_NAME, new File(PageRank.outputFile));
         } catch (IOException e) {
             //exception handling left as an exercise for the reader
+            System.out.println("RunUpdatePageRankJobs: ERROR writing results");
         }
 
         return iteration;
@@ -126,10 +127,11 @@ public class RunUpdatePageRankJobs {
     public static Job createBlockUpdatePageRankJob(int jobId, String inputDirectory, String outputDirectory)
             throws IOException
     {
-//        Job init_job = new Job(new Configuration(), "pagerank_update");
         Configuration conf = new Configuration();
-        Job update_job = Job.getInstance(conf, "pagerank_update");
+        conf.setInt("EXPECTED_NODES", PageRank.EXPECTED_NODES);
+//        conf.setInt("BASE_ACCURACY", PageRank.BASE_ACCURACY);
 
+        Job update_job = Job.getInstance(conf, "pagerank_update");
         update_job.setJarByClass(RunUpdatePageRankJobs.class);
 
         update_job.setMapperClass(BlockUpdatePageRankMapper.class);
@@ -143,7 +145,6 @@ public class RunUpdatePageRankJobs {
         FileInputFormat.addInputPath(update_job, new Path(inputDirectory));
         FileOutputFormat.setOutputPath(update_job, new Path(outputDirectory + "_" + jobId));
 
-//        init_job.setInputFormatClass(KeyValueTextInputFormat.class);
         return update_job;
     }
 
@@ -159,13 +160,10 @@ public class RunUpdatePageRankJobs {
     public static int runBlockUpdatePageRankJobs(int maxIterations, String inputDirectory, String outputDirectory)
             throws IOException, InterruptedException, ClassNotFoundException
     {
-//    	Job job = createUpdateJob((int)System.currentTimeMillis(), inputDirectory, outputDirectory);
         int iteration = 0;
 
         StringBuilder sb = new StringBuilder();
         while (iteration < maxIterations) {
-
-//            Job job = createUpdatePageRankJob((int)System.currentTimeMillis(), inputDirectory, outputDirectory);
             Job job = createBlockUpdatePageRankJob(iteration, inputDirectory, outputDirectory);
             job.waitForCompletion(true);
 
@@ -174,16 +172,20 @@ public class RunUpdatePageRankJobs {
 
             // calculate average residual by getting counter and dividing by number of nodes
             Counters jobCounters = job.getCounters();
+
+            // covert long to double by dividing by base and added accuracy during reduce phase
             Long long_aggregate_pagerank_residuals = jobCounters.findCounter(PageRank.PageRankEnums.AGGREGATE_ITERATION_PAGERANKS_RESIDUALS).getValue();
-            Double aggregate_pagerank_residuals = Double.longBitsToDouble( long_aggregate_pagerank_residuals );
+            Double aggregate_pagerank_residuals = (double)long_aggregate_pagerank_residuals / (double)(PageRank.ADDED_ACCURACY);//(double)(PageRank.BASE_ACCURACY * PageRank.ADDED_ACCURACY);
 
             Double average_residual = aggregate_pagerank_residuals / PageRank.EXPECTED_NODES;
-            System.out.println("Average Residual: " + average_residual);
             sb.append("Iteration " + iteration + " avg error " + average_residual + "\n");
 
             Long aggragate_iterations = jobCounters.findCounter(PageRank.PageRankEnums.AGGREGATE_BLOCK_ITERATIONS).getValue();
             Double average_iterations = Double.valueOf(aggragate_iterations) / PageRank.BLOCKID_BOUNDARIES.size();
             sb.append("Iteration " + iteration + " avg block iterations " + average_iterations + "\n");
+
+            System.out.println("Iteration " + iteration + " avg error " + average_residual);
+            System.out.println("Iteration " + iteration + " avg block iterations " + average_iterations);
 
             if (aggregate_pagerank_residuals < PageRank.EXPECTED_NODES * PageRank.EPSILON) {
                 break;
@@ -198,7 +200,7 @@ public class RunUpdatePageRankJobs {
             FileOutputStream fos = new FileOutputStream(outputFile);
             BufferedOutputStream bos = new BufferedOutputStream(fos);
             ByteArrayInputStream bais = new ByteArrayInputStream(sb.toString().getBytes(StandardCharsets.UTF_8));
-            
+
             int bytesRead;
             byte[] buffer = new byte[1024];
             while ((bytesRead = bais.read(buffer)) != -1)
@@ -207,8 +209,8 @@ public class RunUpdatePageRankJobs {
             bos.flush();
             bos.close();
             bais.close();
-            
-            S3Wrapper.uploadFile(S3Wrapper.BUCKET_NAME, new File(PageRank.outputFile));
+
+            S3Wrapper.uploadFile(PageRank.BUCKET_NAME, new File(PageRank.outputFile));
         } catch (IOException e) {
             //exception handling left as an exercise for the reader
         }

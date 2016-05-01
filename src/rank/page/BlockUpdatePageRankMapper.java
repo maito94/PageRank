@@ -88,7 +88,6 @@ public class BlockUpdatePageRankMapper
     public void map(Object key, Text value, Mapper.Context context)
             throws IOException, InterruptedException
     {
-//        Pattern pattern = Pattern.compile("^ *(\\d+)\\s+(\\d+\\.\\d+)\\s+((\\d+\\s*)*)$");
         Pattern pattern = Pattern.compile("^ *(\\d+)\\s+(\\d+\\.\\d+(?:E-\\d+)?+)\\s+((\\d+\\s*)*)$");
         Matcher matcher = pattern.matcher(value.toString());
 
@@ -118,7 +117,6 @@ public class BlockUpdatePageRankMapper
             node_destinations.set( stringValueForDestinations(source, destinations_arr) );
             context.write(block, node_destinations);
 
-
             for (String dest : destinations_arr) {
                 if (!dest.isEmpty()) {
                     Integer dest_blockID = PageRank.getBlockID(Integer.valueOf(dest));
@@ -128,11 +126,6 @@ public class BlockUpdatePageRankMapper
                         node_boundarycondition.set(stringValueForBoundaries(dest, source, String.valueOf(blockID), pagerank, degrees));
                         context.write(block, node_boundarycondition);
                     }
-
-
-//                 System.out.println("-----------------------------");
-//                 System.out.println("BC: " + node_boundarycondition.toString());
-//                 System.out.println("-----------------------------");
                 }
             }
         }

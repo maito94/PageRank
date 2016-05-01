@@ -33,7 +33,8 @@ public class BlockUpdatePageRankReducer
      */
     public static NTuple.Pair<Double[], Double[]> iterateBlockOnce(Double[] PR, Integer[] deg, Integer blockID,
                                                                    ArrayList< NTuple.Pair<Integer, Integer> > BE,
-                                                                   ArrayList< NTuple.Triple<Integer, Integer, Double> > BC)
+                                                                   ArrayList< NTuple.Triple<Integer, Integer, Double> > BC,
+                                                                   Context context)
     {
 
         Double[] NPR = new Double[ PR.length ];
@@ -65,18 +66,10 @@ public class BlockUpdatePageRankReducer
 
         int pr_length = PR.length;
         for (int i = 0; i < pr_length; i++) {
-            NPR[i] = PageRank.DAMPING_FACTOR*NPR[i] + (1-PageRank.DAMPING_FACTOR)/PageRank.EXPECTED_NODES;
-
-//            System.out.println("-----------------------");
-//            System.out.println("BlockID: " + blockID);
-//            System.out.println("PR[" + i + "]: " + PR[i]);
-//            System.out.println("NPR[" + i + "]: " + NPR[i]);
-//            System.out.println("-----------------------");
-
+            NPR[i] = PageRank.DAMPING_FACTOR*NPR[i] + (1-PageRank.DAMPING_FACTOR)/context.getConfiguration().getInt("EXPECTED_NODES", 1);
 
             // calculate residual for current node
             residuals[i] = Math.abs(PR[i] - NPR[i]) / NPR[i];
-
         }
 
         NTuple.Pair<Double[], Double[]> npr_residuals = new NTuple().new Pair<>(NPR, residuals);
@@ -122,12 +115,9 @@ public class BlockUpdatePageRankReducer
     public void reduce(Text key, Iterable<Text> values, Context context)
             throws IOException, InterruptedException
     {
-//        System.out.println("-----------------------");
-//        System.out.println("REDUCING");
-//        System.out.println("-----------------------");
-
         Integer blockID = Integer.valueOf(key.toString());
         Integer block_size = PageRank.BLOCK_SIZES.get( blockID );
+
         Double[] oldPageRanksInBlock = new Double[block_size]; // PR
         Integer[] degreesOfNode = new Integer[block_size];
 
@@ -136,11 +126,9 @@ public class BlockUpdatePageRankReducer
         ArrayList< NTuple.Pair<Integer, Integer> > edgesInBlock = new ArrayList<>(); // BE
         ArrayList< NTuple.Triple<Integer, Integer, Double> > boundaryConditinsInBlock = new ArrayList<>(); // BC
 
-
         for (Text info : values) {
             String info_str = info.toString();
             String[] info_arr = info_str.split("\\s+");
-
 
             // construct PR array
             if (info_arr[1].contains("PageRank")) {
@@ -214,9 +202,6 @@ public class BlockUpdatePageRankReducer
             }
         }
 
-        int max_iterations = 100;
-        int iterations = 0;
-
         Double[] newPageRanksInBlock;
         Double[] inblock_residuals;
 
@@ -234,21 +219,18 @@ public class BlockUpdatePageRankReducer
             context.getCounter(PageRank.PageRankEnums.AGGREGATE_BLOCK_ITERATIONS).increment(1);
 
             NTuple.Pair<Double[], Double[]> pr_residuals=
-                    iterateBlockOnce(oldPageRanksInBlock, degreesOfNode, blockID, edgesInBlock, boundaryConditinsInBlock);
+                    iterateBlockOnce(oldPageRanksInBlock, degreesOfNode, blockID, edgesInBlock, boundaryConditinsInBlock, context);
 
             // get new page rank values and residuals
             newPageRanksInBlock = pr_residuals.getFirst();
             inblock_residuals = pr_residuals.getSecond();
-            iterations++;
 
             // sum up value of residuals and calculate average
             Double aggregate_inblock_residuals = 0.0;
             for (Double d : inblock_residuals) {
                 aggregate_inblock_residuals += d;
             }
-//            Double average_inblock_residual = aggregate_inblock_residuals / block_size;
             average_inblock_residual = aggregate_inblock_residuals / block_size;
-
 
             // update page ranks to new values
             oldPageRanksInBlock = newPageRanksInBlock;
@@ -269,18 +251,12 @@ public class BlockUpdatePageRankReducer
 
             context.write(node, result);
 
-
             // calculate page rank residual after iterations end (used for outer-block residual calculation)
             Double pagerank_residual = Math.abs(pagerank_start[i] - oldPageRanksInBlock[i]) / oldPageRanksInBlock[i];
 
-            // need to get running page rank residuals and convert it to double to increment value
-            Long long_running_pagerank_residuals = context.getCounter(PageRank.PageRankEnums.AGGREGATE_ITERATION_PAGERANKS_RESIDUALS).getValue();
-            Double running_pagerank_residuals = Double.longBitsToDouble(long_running_pagerank_residuals);
-
-            // overwrite counter for running pagerank residuals
-            long_running_pagerank_residuals = Double.doubleToLongBits( pagerank_residual + running_pagerank_residuals );
-            context.getCounter(PageRank.PageRankEnums.AGGREGATE_ITERATION_PAGERANKS_RESIDUALS).setValue(long_running_pagerank_residuals);
+            // covert double to long and keep an accuracy of at least six decimal places
+            Long long_residual = (long)(pagerank_residual * PageRank.ADDED_ACCURACY);
+            context.getCounter(PageRank.PageRankEnums.AGGREGATE_ITERATION_PAGERANKS_RESIDUALS).increment(long_residual);
         }
-
     }
 }

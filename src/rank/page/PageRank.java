@@ -39,7 +39,7 @@ public class PageRank {
     public static double rejectLIMIT = rejectMIN + 0.01;
 
     public static double DAMPING_FACTOR = 0.85;
-    public static double EPSILON = 0.0001;
+    public static double EPSILON = 0.001;
 
     public static final Integer SOURCE_INDEX = 1;
     public static final Integer PAGE_RANK_INDEX = 2;

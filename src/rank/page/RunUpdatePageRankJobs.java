@@ -181,7 +181,7 @@ public class RunUpdatePageRankJobs {
             sb.append("Iteration " + iteration + " avg error " + average_residual + "\n");
 
             Long aggragate_iterations = jobCounters.findCounter(PageRank.PageRankEnums.AGGREGATE_BLOCK_ITERATIONS).getValue();
-            Double average_iterations = Double.valueOf(aggragate_iterations) / PageRank.BLOCKID_BOUNDARIES.size();
+            Double average_iterations = (double)aggragate_iterations / (double)PageRank.BLOCKID_BOUNDARIES.length;
             sb.append("Iteration " + iteration + " avg block iterations " + average_iterations + "\n");
 
             System.out.println("Iteration " + iteration + " avg error " + average_residual);

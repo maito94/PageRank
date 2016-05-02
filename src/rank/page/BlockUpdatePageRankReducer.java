@@ -116,7 +116,7 @@ public class BlockUpdatePageRankReducer
             throws IOException, InterruptedException
     {
         Integer blockID = Integer.valueOf(key.toString());
-        Integer block_size = PageRank.BLOCK_SIZES.get( blockID );
+        Integer block_size = PageRank.BLOCK_SIZES[ blockID ];
 
         Double[] oldPageRanksInBlock = new Double[block_size]; // PR
         Integer[] degreesOfNode = new Integer[block_size];
@@ -216,7 +216,7 @@ public class BlockUpdatePageRankReducer
         while (average_inblock_residual > PageRank.EPSILON) {
 //      while (iterations < max_iterations) {
 
-            context.getCounter(PageRank.PageRankEnums.AGGREGATE_BLOCK_ITERATIONS).increment(1);
+            context.getCounter(PageRank.PageRankEnums.AGGREGATE_BLOCK_ITERATIONS).increment(1L);
 
             NTuple.Pair<Double[], Double[]> pr_residuals=
                     iterateBlockOnce(oldPageRanksInBlock, degreesOfNode, blockID, edgesInBlock, boundaryConditinsInBlock, context);

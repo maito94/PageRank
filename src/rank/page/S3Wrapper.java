@@ -15,18 +15,17 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class S3Wrapper {
-    public static final String BUCKET_NAME = "cs5300-hadoop-project";
-    private static final String ACCESS_KEY_ID = "AKIAJ62G62YTENYHAHYA";
-    private static final String SECRET_ACCESS_KEY = "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";
-    private static final AmazonS3 S3CLIENT = new AmazonS3Client(new BasicAWSCredentials(ACCESS_KEY_ID, SECRET_ACCESS_KEY));
-    
+//    public static final String BUCKET_NAME = "edu-cornell-cs-cs5300s16-mag399-proj2";
+
+    private static final AmazonS3 S3CLIENT = new AmazonS3Client(new BasicAWSCredentials(PageRank.ACCESS_KEY_ID, PageRank.SECRET_ACCESS_KEY));
+
     public static void listBuckets() {
         System.out.println("----- Buckets -----");
         for (Bucket b : S3CLIENT.listBuckets())
             System.out.println(" " + b);
         System.out.println();
     }
-    
+
     public static void listElements(String bucketname) {
         if (S3CLIENT.doesBucketExist(bucketname)) {
             System.out.println("----- Bucket Contents -----");
@@ -35,7 +34,7 @@ public class S3Wrapper {
             System.out.println();
         }
     }
-    
+
     public static void createBucket(String bucketname) {
         if (!S3CLIENT.doesBucketExist(bucketname)) {
             System.out.println("Creating bucket: " + bucketname);
@@ -43,7 +42,7 @@ public class S3Wrapper {
             System.out.println("Bucket " + bucketname + " was successfully created.\n");
         }
     }
-    
+
     public static void deleteBucket(String bucketname) {
         if (S3CLIENT.doesBucketExist(bucketname)) {
             System.out.println("Deleting bucket: " + bucketname);
@@ -51,7 +50,7 @@ public class S3Wrapper {
             System.out.println("Bucket " + bucketname + " was deleted successfully.\n");
         }
     }
-    
+
     public static void uploadFile(String bucketname, File file) {
         if (!S3CLIENT.doesBucketExist(bucketname))
             createBucket(bucketname);
@@ -59,32 +58,32 @@ public class S3Wrapper {
         S3CLIENT.putObject(bucketname, file.getName(), file);
         System.out.println("File " + file.getName() + " was uploaded successfully.\n");
     }
-    
+
     public static File downloadFile(String bucketname, String filename, boolean overwrite) {
         if (S3CLIENT.doesBucketExist(bucketname)) {
             try {
                 S3Object s3object = S3CLIENT.getObject(bucketname, filename);
                 InputStream s3is = s3object.getObjectContent();
-                
+
                 File file;
                 if (overwrite)
                     file = new File("res/" + filename);
                 else
                     file = new File("res/" + filename + "-" + System.currentTimeMillis());
                 FileOutputStream fos = new FileOutputStream(file);
-                
+
                 System.out.println("Downloading file: " + filename + " --- Overwrite: " + overwrite);
                 int bytesRead;
                 byte[] buffer = new byte[1024];
                 while ((bytesRead = s3is.read(buffer)) != -1)
                     fos.write(buffer, 0, bytesRead);
-                
+
                 fos.flush();
                 fos.close();
                 s3is.close();
                 s3object.close();
                 System.out.println("File " + filename + " was downloaded to " + file.getName() + " successfully.");
-                
+
                 return file;
             }
             catch (IOException ex) {
